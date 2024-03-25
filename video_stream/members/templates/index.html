@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        #video {
+            width: 640px;
+            height: 480px;
+            margin-bottom: 20px;
+        }
+        #faceDetails {
+            margin-top: 20px;
+            border-collapse: collapse;
+            width: 100%;
+        }
+        #faceDetails th, #faceDetails td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        #faceDetails th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Face Recognition</h1>
+    <video id="video" autoplay></video>
+    <canvas id="canvas" style="display: none;"></canvas>
+    <table id="faceDetails">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody id="faceDetailsBody"></tbody>
+    </table>
+
+    <script>
+        $(document).ready(function() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const context = canvas.getContext('2d');
+            const faceDetailsBody = document.getElementById('faceDetailsBody');
+
+            navigator.getUserMedia = (navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia);
+
+            if (navigator.getUserMedia) {
+                navigator.getUserMedia({ video: true }, function(stream) {
+                    video.srcObject = stream;
+                    setInterval(sendFrameToBackend, 1000); // Send frame to backend every 1 second
+                }, function(error) {
+                    console.error('Error accessing webcam:', error);
+                });
+            } else {
+                console.error('getUserMedia not supported in this browser.');
+            }
+
+            function sendFrameToBackend() {
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL('image/jpeg');
+                const csrftoken = getCookie('csrftoken');
+
+                // Send frame data to backend
+                $.ajax({
+                    type: 'POST',
+                    url: '/process_video_frame/',
+                    headers: { 'X-CSRFToken': csrftoken },
+                    data: { frame_data: imageData },
+                    success: function(response) {
+                        // Display processed frame on the video element
+                        video.src = response.processed_frame;
+
+                        // Clear previous face details
+                        faceDetailsBody.innerHTML = '';
+
+                        // Add face details to the table
+                        response.face_details.forEach(function(face) {
+                            const row = `<tr>
+                                <td>${face.name}</td>
+                            </tr>`;
+                            faceDetailsBody.innerHTML += row;
+                        });
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error sending frame to backend:', error);
+                    }
+                });
+            }
+        });
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+    </script>
+</body>
+</html>
